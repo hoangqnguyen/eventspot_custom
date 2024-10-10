@@ -21,6 +21,7 @@ class HungarianMatcher(nn.Module):
         self.cost_frame = cost_frame
         self.cost_coord = cost_coord
 
+    @torch.no_grad()
     def forward(self, outputs, targets):
         """
         Performs the matching between predictions and targets.
@@ -181,4 +182,26 @@ class SetCriterion(nn.Module):
         Returns:
             dict: Losses
         """
-        # Retrieve the matching between the outputs an
+        # Retrieve the matching between the outputs and the targets
+        indices = self.matcher(outputs, targets)
+
+        # Compute the average number of target events across all elements, for normalization purposes
+        num_targets = sum([len(t['labels']) for t in targets])
+        num_targets = max(num_targets, 1)
+
+        # Compute all requested losses
+        losses = {}
+        for loss in self.losses:
+            if loss == "labels":
+                losses.update(self.loss_labels(outputs, targets, indices, num_targets))
+            if loss == "frames":
+                losses.update(self.loss_frames(outputs, targets, indices, num_targets))
+            if loss == "xy":
+                losses.update(self.loss_xy(outputs, targets, indices, num_targets))
+
+        # Total loss weighted sum
+        weighted_losses = {k: v * self.weight_dict[k] for k, v in losses.items() if k in self.weight_dict}
+        total_loss = sum(weighted_losses.values())
+        weighted_losses["loss"] = total_loss
+
+        return weighted_losses
