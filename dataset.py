@@ -71,7 +71,9 @@ class VolleyballVideoDataset(Dataset):
             class_names = f.read().splitlines()
         self.class_names = ["background"] + class_names
         self.num_classes = len(self.class_names)
-        self.class_to_idx = {cls_name: idx for idx, cls_name in enumerate(self.class_names)}
+        self.class_to_idx = {
+            cls_name: idx for idx, cls_name in enumerate(self.class_names)
+        }
 
         # Load video data from JSON
         with open(json_file, "r") as f:
@@ -119,14 +121,17 @@ class VolleyballVideoDataset(Dataset):
                 for event in events:
                     if start_idx <= event["frame"] < end_idx:
                         event_in_seq = {
-                            "frame": (event["frame"] - start_idx) / seq_length,  # Normalize frame index
+                            "frame": (event["frame"] - start_idx)
+                            / seq_length,  # Normalize frame index
                             "label": event["label"],
                             "xy": event["xy"],
                         }
                         seq_events.append(event_in_seq)
 
                 # Prepend video_name to frame files for correct path
-                seq_frame_files_full = [os.path.join(video_name, f) for f in seq_frame_files]
+                seq_frame_files_full = [
+                    os.path.join(video_name, f) for f in seq_frame_files
+                ]
 
                 sequences.append(
                     {
@@ -181,21 +186,27 @@ class VolleyballVideoDataset(Dataset):
         event_frames = set()  # To track which frames already have events
         for event in sequence_info["seq_events"]:
             frame_idx = event["frame"]  # Normalized frame index
-            label_idx = self.class_to_idx.get(event["label"], 0)  # Convert label to index
+            label_idx = self.class_to_idx.get(
+                event["label"], 0
+            )  # Convert label to index
             xy = event["xy"]  # (x, y) coordinates in relative terms (0 to 1)
             # Duplicate coordinates to create a bounding box (x1, y1, x2, y2)
             x1, y1 = xy[0] * width, xy[1] * height
 
             target["bounding_boxes"].append([x1, y1, x1, y1])
             target["labels"].append(label_idx)
-            target["frames"].append(frame_idx)  # Keep the normalized frame index separately
+            target["frames"].append(
+                frame_idx
+            )  # Keep the normalized frame index separately
             event_frames.add(frame_idx)  # Mark this frame as having an event
 
         # **Generate Background Events** if the number of events is less than num_events
         num_gt_events = len(target["labels"])
         num_background_events = max(0, self.num_events - num_gt_events)
         available_frame_indices = [
-            i / seq_length for i in range(seq_length) if (i / seq_length) not in event_frames
+            i / seq_length
+            for i in range(seq_length)
+            if (i / seq_length) not in event_frames
         ]
 
         # Handle cases where available_frame_indices < num_background_events
@@ -273,8 +284,7 @@ class VolleyballVideoDataset(Dataset):
         )
 
 
-
-def get_dataloader(dataset, batch_size=4, shuffle=True, num_workers=4):
+def get_dataloaders(config):
     """
     Returns a DataLoader for the given dataset.
 
@@ -287,15 +297,71 @@ def get_dataloader(dataset, batch_size=4, shuffle=True, num_workers=4):
     Returns:
         DataLoader: The DataLoader instance.
     """
-    return DataLoader(
-        dataset,
-        batch_size=batch_size,
-        shuffle=shuffle,
-        num_workers=num_workers,
-        # pin_memory=True if torch.cuda.is_available() else False,
-        drop_last=shuffle,  # Drop last batch if shuffling (typically for training)
-        collate_fn=custom_collate_fn,  # Use the custom collate function if needed
+
+    # Define transforms for training and validation
+    train_transforms = get_transforms(
+        split="train",
+        frame_size=tuple(config.frame_size),
     )
+    val_transforms = get_transforms(
+        split="val",
+        frame_size=tuple(config.frame_size),
+    )
+
+    # Instantiate training and validation datasets
+    train_dataset = VolleyballVideoDataset(
+        json_file=config.train_json,
+        frames_dir=config.frames_dir,
+        classes_file=config.classes_file,
+        transform=train_transforms,
+        window_size=config.window_size,
+        stride=config.stride,
+        num_events=config.num_events,
+        frame_size=tuple(config.frame_size),
+    )
+
+    val_dataset = VolleyballVideoDataset(
+        json_file=config.val_json,
+        frames_dir=config.frames_dir,
+        classes_file=config.classes_file,
+        transform=val_transforms,
+        window_size=config.window_size,
+        stride=config.stride,
+        num_events=config.num_events,
+        frame_size=tuple(config.frame_size),
+    )
+
+    # Print dataset statistics
+    print("\nTraining Dataset Statistics:")
+    train_dataset.print_stats()
+
+    print("\nValidation Dataset Statistics:")
+    val_dataset.print_stats()
+
+    # Create DataLoaders
+    train_loader = DataLoader(
+        train_dataset,
+        batch_size=config.batch_size,
+        shuffle=True,
+        num_workers=config.num_workers,
+        # pin_memory=True if torch.cuda.is_available() else False,
+        drop_last=True,
+        collate_fn=custom_collate_fn,
+    )
+
+    val_loader = DataLoader(
+        val_dataset,
+        batch_size=config.val_batch_size,
+        shuffle=False,
+        num_workers=config.num_workers,
+        # pin_memory=True if torch.cuda.is_available() else False,
+        drop_last=False,
+        collate_fn=custom_collate_fn,
+    )
+
+    test_loader = None  # TODO
+
+    return train_loader, val_loader, test_loader
 
 
 def custom_collate_fn(batch):
@@ -311,7 +377,9 @@ def custom_collate_fn(batch):
     images_list = [sample["images"] for sample in batch]
     frames_list = [sample["frame"] for sample in batch]  # Normalized frame indices
     labels_list = [sample["label"] for sample in batch]
-    xys_list = [sample["xy"] for sample in batch]  # Bounding boxes in normalized XY format
+    xys_list = [
+        sample["xy"] for sample in batch
+    ]  # Bounding boxes in normalized XY format
 
     # Find the maximum sequence length in the batch
     seq_lengths = [images.shape[0] for images in images_list]
@@ -404,7 +472,9 @@ def visualize_batch(batch, class_names):
                     # Get the frame index and the corresponding image
                     frame_idx = int(frames[i, e].item() * (max_seq_length - 1))
                     img = images[i, frame_idx].permute(1, 2, 0).cpu().numpy()
-                    img = (img - img.min()) / (img.max() - img.min())  # Normalize to [0, 1]
+                    img = (img - img.min()) / (
+                        img.max() - img.min()
+                    )  # Normalize to [0, 1]
 
                     # Get event coordinates and class label
                     x, y = xys[i, e].cpu().numpy()
@@ -415,16 +485,25 @@ def visualize_batch(batch, class_names):
                     fig, ax = plt.subplots(1)
                     ax.imshow(img)
                     # Draw a circle at the event location
-                    circ = patches.Circle((x, y), radius=5, linewidth=1, edgecolor='r', facecolor='none')
+                    circ = patches.Circle(
+                        (x, y), radius=5, linewidth=1, edgecolor="r", facecolor="none"
+                    )
                     ax.add_patch(circ)
                     # Add label text
-                    ax.text(x, y, label_text, fontsize=12, color='yellow', bbox=dict(facecolor='red', alpha=0.5))
+                    ax.text(
+                        x,
+                        y,
+                        label_text,
+                        fontsize=12,
+                        color="yellow",
+                        bbox=dict(facecolor="red", alpha=0.5),
+                    )
                     plt.title(f"Batch {i+1}, Event {e+1}")
-                    plt.axis('off')
+                    plt.axis("off")
                     plt.show()
 
     # Optionally, close all figures to free memory
-    plt.close('all')
+    plt.close("all")
 
 
 if __name__ == "__main__":

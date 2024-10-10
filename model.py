@@ -26,6 +26,7 @@ class SimpleVideoTFModel(pl.LightningModule):
         dropout=0.1,
         matcher=None,
         weight_dict=None,
+        criterion=None,
         eos_coef=0.1,
     ):
         """
@@ -110,7 +111,7 @@ class SimpleVideoTFModel(pl.LightningModule):
         else:
             self.weight_dict = weight_dict
 
-        self.criterion = SetCriterion(
+        self.criterion = criterion or SetCriterion(
             matcher=self.matcher,
             weight_dict=self.weight_dict,
             eos_coef=eos_coef,

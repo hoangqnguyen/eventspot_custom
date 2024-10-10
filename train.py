@@ -18,11 +18,8 @@ from pytorch_lightning.loggers import TensorBoardLogger
 from torch.utils.data import DataLoader
 
 # Import your custom modules
-from dataset import (
-    VolleyballVideoDataset,
-    custom_collate_fn,
-    visualize_batch,
-)
+from dataset import get_dataloaders
+
 from model import SimpleVideoTFModel
 from loss import HungarianMatcher, SetCriterion
 from transform import get_transforms
@@ -57,66 +54,7 @@ def train(config_path="configs/base_kovo.py", **overrides):
     # Set random seed for reproducibility
     pl.seed_everything(config.seed)
 
-    # Define transforms for training and validation
-    train_transforms = get_transforms(
-        split="train",
-        frame_size=tuple(config.frame_size),
-    )
-    val_transforms = get_transforms(
-        split="val",
-        frame_size=tuple(config.frame_size),
-    )
-
-    # Instantiate training and validation datasets
-    train_dataset = VolleyballVideoDataset(
-        json_file=config.train_json,
-        frames_dir=config.frames_dir,
-        classes_file=config.classes_file,
-        transform=train_transforms,
-        window_size=config.window_size,
-        stride=config.stride,
-        num_events=config.num_events,
-        frame_size=tuple(config.frame_size),
-    )
-
-    val_dataset = VolleyballVideoDataset(
-        json_file=config.val_json,
-        frames_dir=config.frames_dir,
-        classes_file=config.classes_file,
-        transform=val_transforms,
-        window_size=config.window_size,
-        stride=config.stride,
-        num_events=config.num_events,
-        frame_size=tuple(config.frame_size),
-    )
-
-    # Print dataset statistics
-    print("\nTraining Dataset Statistics:")
-    train_dataset.print_stats()
-
-    print("\nValidation Dataset Statistics:")
-    val_dataset.print_stats()
-
-    # Create DataLoaders
-    train_loader = DataLoader(
-        train_dataset,
-        batch_size=config.batch_size,
-        shuffle=True,
-        num_workers=config.num_workers,
-        # pin_memory=True if torch.cuda.is_available() else False,
-        drop_last=True,
-        collate_fn=custom_collate_fn,
-    )
-
-    val_loader = DataLoader(
-        val_dataset,
-        batch_size=config.val_batch_size,
-        shuffle=False,
-        num_workers=config.num_workers,
-        # pin_memory=True if torch.cuda.is_available() else False,
-        drop_last=False,
-        collate_fn=custom_collate_fn,
-    )
+    train_loader, val_loader, test_loader = get_dataloaders(config)
 
     # Initialize Matcher and Criterion
     matcher = HungarianMatcher(
@@ -155,6 +93,7 @@ def train(config_path="configs/base_kovo.py", **overrides):
         matcher=matcher,
         weight_dict=weight_dict,
         eos_coef=config.eos_coef,
+        criterion=criterion,
     )
 
     # Setup TensorBoard logger
