@@ -1,5 +1,3 @@
-# train.py
-
 import os
 from pathlib import Path
 
@@ -20,12 +18,13 @@ from loss import HungarianMatcher, SetCriterion
 from utils import load_config, update_config, get_num_classes, create_experiment_dir
 
 
-def train(config_path="configs/base_kovo.py", **overrides):
+def train(config_path="configs/base_kovo.py", ckpt_path=None, **overrides):
     """
     Trains the SimpleVideoTFModel using the specified configuration and overrides.
 
     Args:
         config_path (str): Path to the config Python file.
+        ckpt_path (str): Path to the checkpoint to resume training from (optional).
         **overrides: Key-value pairs to override the configuration.
     """
     # Load configuration
@@ -117,7 +116,6 @@ def train(config_path="configs/base_kovo.py", **overrides):
     trainer = pl.Trainer(
         max_epochs=config.max_epochs,
         accelerator="auto",
-        # precision="bf16",
         logger=logger,
         callbacks=[checkpoint_callback, early_stop_callback, lr_monitor],
         log_every_n_steps=50,
@@ -125,8 +123,8 @@ def train(config_path="configs/base_kovo.py", **overrides):
         accumulate_grad_batches=config.gradient_accumulation_steps,
     )
 
-    # Start training
-    trainer.fit(model, train_loader, val_loader)
+    # Start training from the checkpoint if provided, otherwise start from scratch
+    trainer.fit(model, train_loader, val_loader, ckpt_path=ckpt_path)
 
     # Optionally, test the model on the validation set
     # trainer.test(model, dataloaders=val_loader)
