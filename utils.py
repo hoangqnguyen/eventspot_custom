@@ -4,6 +4,9 @@ import re
 import json
 import pickle
 import gzip
+import importlib.util
+from pathlib import Path
+from typing import Optional, Type
 
 
 def load_json(fpath):
@@ -64,13 +67,108 @@ def clear_files(dir_name, re_str, exclude=[]):
 
 
 class Timer:
-    def __init__(self, message="Elapsed time"):
+    def __init__(self, message: str = "Elapsed time"):
         self.message = message
 
-    def __enter__(self):
-        self.start_time = time.time()
-        return self  # If you need to return any object, it would be here
+    def __enter__(self) -> "Timer":
+        self.start_time = time.perf_counter()
+        return self
 
-    def __exit__(self, exc_type, exc_value, traceback):
-        elapsed_time = time.time() - self.start_time
+    def __exit__(
+        self,
+        exc_type: Optional[Type[BaseException]],
+        exc_value: Optional[BaseException],
+        traceback: Optional[Type[BaseException]],
+    ) -> None:
+        elapsed_time = time.perf_counter() - self.start_time
         print(f"{self.message}: {elapsed_time:.4f} seconds")
+
+
+def load_config(config_path):
+    """
+    Dynamically loads a Python config file and returns the config dictionary.
+
+    Args:
+        config_path (str): Path to the config Python file.
+
+    Returns:
+        EasyDict: Configuration dictionary.
+    """
+    spec = importlib.util.spec_from_file_location("config", config_path)
+    config_module = importlib.util.module_from_spec(spec)
+    spec.loader.exec_module(config_module)
+    return config_module.config
+
+
+def update_config(config, overrides):
+    """
+    Updates the configuration dictionary with overrides.
+
+    Args:
+        config (EasyDict): Original configuration.
+        overrides (dict): Overrides to apply.
+
+    Returns:
+        EasyDict: Updated configuration.
+    """
+    for key, value in overrides.items():
+        if hasattr(config, key):
+            setattr(config, key, value)
+            print(f"Overriding config parameter: {key} = {value}")
+        else:
+            print(f"Warning: Config has no attribute named '{key}'. Skipping override.")
+    return config
+
+
+def get_num_classes(classes_file):
+    """
+    Reads the classes file and returns the number of classes.
+
+    Args:
+        classes_file (str): Path to the classes file.
+
+    Returns:
+        tuple: (num_classes, class_names)
+    """
+    with open(classes_file, "r") as f:
+        class_names = f.read().splitlines()
+    # Include 'background' as the first class
+    class_names = ["background"] + class_names
+    num_classes = len(class_names)
+    return num_classes, class_names
+
+
+def create_experiment_dir(config, run_name=None):
+    """
+    Creates a unique experiment directory to store checkpoints and config.
+
+    Args:
+        config (EasyDict): Configuration dictionary.
+        run_name (str, optional): Custom run name. If None, use timestamp.
+
+    Returns:
+        str: Path to the experiment directory.
+    """
+    exp_dir = Path("exp")
+    exp_dir.mkdir(parents=True, exist_ok=True)
+
+    if run_name is None:
+        from datetime import datetime
+
+        run_name = datetime.now().strftime("%Y%m%d_%H%M%S")
+
+    experiment_dir = exp_dir / run_name
+    checkpoints_dir = experiment_dir / "checkpoints"
+    checkpoints_dir.mkdir(parents=True, exist_ok=True)
+
+    # Update config checkpoint_dir to point to the new checkpoints directory
+    config.checkpoint_dir = str(checkpoints_dir)
+
+    # Save the config file into the experiment directory for reference
+
+    # Save the config as a JSON file into the experiment directory for reference
+    config_save_path = experiment_dir / "config.json"
+    # Convert EasyDict to regular dict
+    store_json(config_save_path, config, pretty=True)
+
+    return str(experiment_dir)

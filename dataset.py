@@ -292,7 +292,7 @@ def get_dataloader(dataset, batch_size=4, shuffle=True, num_workers=4):
         batch_size=batch_size,
         shuffle=shuffle,
         num_workers=num_workers,
-        pin_memory=True if torch.cuda.is_available() else False,
+        # pin_memory=True if torch.cuda.is_available() else False,
         drop_last=shuffle,  # Drop last batch if shuffling (typically for training)
         collate_fn=custom_collate_fn,  # Use the custom collate function if needed
     )
