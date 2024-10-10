@@ -217,9 +217,9 @@ if __name__ == "__main__":
     from tqdm import tqdm
 
     configs = dict(
-        json_file="data/kovo/train.json",
-        frames_dir="data/kovo/frames",
-        classes_file="data/kovo/class.txt",
+        json_file="data/kovo_288p/train.json",
+        frames_dir="data/kovo_288p/frames",
+        classes_file="data/kovo_288p/class.txt",
         window_size=16,
         stride=8,
         transform=transforms.Compose(
