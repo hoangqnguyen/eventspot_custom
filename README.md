@@ -1,3 +1,4 @@
 # TODO List
 - [x] Impl. Dataset / loader
-- [ ] Impl. Evaluation function
+- [x] Impl. Trainer
+- [ ] Impl. Evaluation function in `score.py`
