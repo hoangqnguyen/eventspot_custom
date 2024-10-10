@@ -6,6 +6,7 @@ import torch.nn.functional as F
 from scipy.optimize import linear_sum_assignment
 import numpy as np
 
+
 class HungarianMatcher(nn.Module):
     def __init__(self, cost_class=1.0, cost_frame=1.0, cost_coord=1.0):
         """
@@ -62,12 +63,20 @@ class HungarianMatcher(nn.Module):
             # Compute cost matrix for the current batch element
             # Classification cost: Negative log-probability of the target class
             prob = F.softmax(logits, dim=-1)  # (num_queries, num_classes)
-            cost_class = -prob[:, tgt_labels]  # (num_queries, num_targets)
+            # Gather the probabilities of the target classes
+            # This requires tgt_labels to be within [0, num_classes-1]
+            if torch.any(tgt_labels >= num_classes) or torch.any(tgt_labels < 0):
+                raise ValueError(f"Target labels must be in [0, {num_classes-1}]")
+
+            # cost_class: (num_queries, num_targets)
+            cost_class = -prob[:, tgt_labels]  # Negative log-probability
 
             # Frame index cost: L1 distance between predicted and target frame indices
+            # frames: (num_queries,), tgt_frames: (num_targets,)
             cost_frame = torch.abs(frames.unsqueeze(1) - tgt_frames.unsqueeze(0))  # (num_queries, num_targets)
 
             # Coordinate cost: L1 distance between predicted and target xy coordinates
+            # xy: (num_queries, 2), tgt_xy: (num_targets, 2)
             cost_coord = torch.abs(xy.unsqueeze(1) - tgt_xy.unsqueeze(0)).sum(-1)  # (num_queries, num_targets)
 
             # Total cost
@@ -76,12 +85,15 @@ class HungarianMatcher(nn.Module):
             # Convert cost_matrix to numpy for scipy
             cost_matrix = cost_matrix.detach().cpu().numpy()
 
-            # Perform Hungarian matching
+            # Perform Hungarian matching (linear_sum_assignment)
             row_ind, col_ind = linear_sum_assignment(cost_matrix)
-            indices.append((torch.as_tensor(row_ind, dtype=torch.int64),
-                            torch.as_tensor(col_ind, dtype=torch.int64)))
+            indices.append((
+                torch.as_tensor(row_ind, dtype=torch.int64, device=logits.device),
+                torch.as_tensor(col_ind, dtype=torch.int64, device=logits.device)
+            ))
 
         return indices
+
 
 class SetCriterion(nn.Module):
     def __init__(self, matcher, weight_dict, eos_coef, num_classes, losses=["labels", "frames", "xy"]):
@@ -106,7 +118,8 @@ class SetCriterion(nn.Module):
         self.register_buffer('empty_weight', empty_weight)
 
     def loss_labels(self, outputs, targets, indices, num_targets):
-        """Classification loss (CrossEntropy)
+        """
+        Classification loss (CrossEntropy)
         targets dicts must contain a "labels" key.
         """
         src_logits = outputs['logits']  # (batch_size, num_queries, num_classes)
@@ -129,45 +142,76 @@ class SetCriterion(nn.Module):
         return {'loss_ce': loss_ce}
 
     def loss_frames(self, outputs, targets, indices, num_targets):
-        """Regression loss for frame indices (L1)
+        """
+        Regression loss for frame indices (L1)
         targets dicts must contain a "frames" key.
+        Computes loss only for matched queries (ignores background).
         """
         src_frames = outputs['frames']  # (batch_size, num_queries)
 
-        # Flatten to (batch_size*num_queries,)
-        src_frames = src_frames.view(-1)
-
-        # Initialize target frames with zeros (background)
-        target_frames = torch.zeros_like(src_frames)
+        # Initialize lists to collect matched frames
+        matched_src_frames = []
+        matched_tgt_frames = []
 
         for batch_idx, (src_idx, tgt_idx) in enumerate(indices):
-            # Assign target frame indices to matched queries
-            target_frames[batch_idx * outputs['frames'].shape[1] + src_idx] = targets[batch_idx]['frames'][tgt_idx]
+            # Check if the matched target is not background
+            tgt_labels = targets[batch_idx]['labels'][tgt_idx]  # (num_matched_queries,)
+            non_bg_mask = tgt_labels != 0  # (num_matched_queries,)
 
-        # Compute L1 loss
-        loss_frame = F.l1_loss(src_frames, target_frames, reduction='mean')
+            # Filter out background matches
+            if non_bg_mask.sum() == 0:
+                continue  # No non-background matches in this batch element
+
+            matched_src_frames.append(src_frames[batch_idx][src_idx][non_bg_mask])
+            matched_tgt_frames.append(targets[batch_idx]['frames'][tgt_idx][non_bg_mask])
+
+        if len(matched_src_frames) == 0:
+            # No non-background matches in the entire batch
+            loss_frame = torch.tensor(0.0, device=src_frames.device, requires_grad=True)
+        else:
+            # Concatenate all matched frames across the batch
+            matched_src_frames = torch.cat(matched_src_frames)  # (total_non_bg_matched_queries,)
+            matched_tgt_frames = torch.cat(matched_tgt_frames)  # (total_non_bg_matched_queries,)
+
+            # Compute L1 loss only on matched queries
+            loss_frame = F.l1_loss(matched_src_frames, matched_tgt_frames, reduction='mean')
 
         return {'loss_frame': loss_frame}
 
     def loss_xy(self, outputs, targets, indices, num_targets):
-        """Regression loss for xy coordinates (L1)
+        """
+        Regression loss for xy coordinates (L1)
         targets dicts must contain a "xy" key.
-        Applies mask to ignore background events.
+        Computes loss only for matched queries (ignores background).
         """
         src_xy = outputs['xy']  # (batch_size, num_queries, 2)
 
-        # Flatten to (batch_size*num_queries, 2)
-        src_xy = src_xy.view(-1, 2)
-
-        # Initialize target xy with zeros (background)
-        target_xy = torch.zeros_like(src_xy)
+        # Initialize lists to collect matched xy coordinates
+        matched_src_xy = []
+        matched_tgt_xy = []
 
         for batch_idx, (src_idx, tgt_idx) in enumerate(indices):
-            # Assign target xy coordinates to matched queries
-            target_xy[batch_idx * outputs['xy'].shape[1] + src_idx] = targets[batch_idx]['xy'][tgt_idx]
+            # Check if the matched target is not background
+            tgt_labels = targets[batch_idx]['labels'][tgt_idx]  # (num_matched_queries,)
+            non_bg_mask = tgt_labels != 0  # (num_matched_queries,)
 
-        # Compute L1 loss
-        loss_xy = F.l1_loss(src_xy, target_xy, reduction='mean')
+            # Filter out background matches
+            if non_bg_mask.sum() == 0:
+                continue  # No non-background matches in this batch element
+
+            matched_src_xy.append(src_xy[batch_idx][src_idx][non_bg_mask])  # (num_non_bg_matches, 2)
+            matched_tgt_xy.append(targets[batch_idx]['xy'][tgt_idx][non_bg_mask])  # (num_non_bg_matches, 2)
+
+        if len(matched_src_xy) == 0:
+            # No non-background matches in the entire batch
+            loss_xy = torch.tensor(0.0, device=src_xy.device, requires_grad=True)
+        else:
+            # Concatenate all matched xy coordinates across the batch
+            matched_src_xy = torch.cat(matched_src_xy)  # (total_non_bg_matched_queries, 2)
+            matched_tgt_xy = torch.cat(matched_tgt_xy)  # (total_non_bg_matched_queries, 2)
+
+            # Compute L1 loss only on matched queries
+            loss_xy = F.l1_loss(matched_src_xy, matched_tgt_xy, reduction='mean')
 
         return {'loss_xy': loss_xy}
 
