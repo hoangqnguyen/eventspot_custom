@@ -1,9 +1,6 @@
 # train.py
 
-import importlib.util
 import os
-import shutil
-import sys
 from pathlib import Path
 
 import fire
@@ -15,16 +12,12 @@ from pytorch_lightning.callbacks import (
     LearningRateMonitor,
 )
 from pytorch_lightning.loggers import TensorBoardLogger
-from torch.utils.data import DataLoader
 
 # Import your custom modules
 from dataset import get_dataloaders
 
 from model import SimpleVideoTFModel
 from loss import HungarianMatcher, SetCriterion
-from transform import get_transforms
-
-from easydict import EasyDict as edict
 from utils import load_config, update_config, get_num_classes, create_experiment_dir
 
 
