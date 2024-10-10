@@ -196,6 +196,19 @@ class SimpleVideoTFModel(pl.LightningModule):
 
         return logits, frames, coords
 
+    def predict(self, x):
+        """
+        Predicts the class labels, frame indices, and xy coordinates for the input sequence.
+
+        Args:
+            x (torch.Tensor): Input tensor of shape (B, T, C, H, W).
+
+        Returns:
+            dict: Dictionary containing 'logits', 'frames', 'xy' tensors.
+        """
+        logits, frames, coords = self(x)
+        return logits, frames.sigmoid(), coords.sigmoid()
+
     def training_step(self, batch, batch_idx):
         """
         Training step.
@@ -224,7 +237,7 @@ class SimpleVideoTFModel(pl.LightningModule):
             targets.append(target)
 
         # Forward pass
-        logits, frames_pred, coords = self(
+        logits, frames_pred, coords = self.predict(
             images
         )  # logits: (B, num_queries, num_classes)
 
@@ -269,7 +282,7 @@ class SimpleVideoTFModel(pl.LightningModule):
             targets.append(target)
 
         # Forward pass
-        logits, frames_pred, coords = self(images)
+        logits, frames_pred, coords = self.predict(images)
 
         # Prepare outputs for SetCriterion
         outputs = {
@@ -349,7 +362,7 @@ if __name__ == "__main__":
     }
 
     # Forward pass
-    logits, frames_pred, coords = model(dummy_batch["images"])
+    logits, frames_pred, coords = model.predict(dummy_batch["images"])
     print("Logits shape:", logits.shape)  # Expected: (2, num_queries, num_classes)
     print("Frames_pred shape:", frames_pred.shape)  # Expected: (2, num_queries)
     print("Coords shape:", coords.shape)  # Expected: (2, num_queries, 2)

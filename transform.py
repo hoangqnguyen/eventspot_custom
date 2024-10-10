@@ -1,3 +1,8 @@
+import torch
+import torch.nn as nn
+from torchvision.transforms import v2 as T_v2
+
+
 def get_transforms(split, frame_size=(224, 224)):
     """
     Returns the transforms for the given dataset split.
@@ -22,7 +27,7 @@ def get_transforms(split, frame_size=(224, 224)):
                         ),
                         T_v2.RandomPerspective(distortion_scale=0.2, p=0.5),
                         T_v2.RandomZoomOut(fill=0, side_range=(1.0, 2.0), p=0.5),
-                        nn.Identity(),
+                        IdentityTransform(),
                     ]
                 ),
                 T_v2.Resize(frame_size),
@@ -50,3 +55,10 @@ def get_transforms(split, frame_size=(224, 224)):
             ]
         )
     return transform
+
+class IdentityTransform(nn.Module):
+    def forward(self, img, label=None):
+        # Do some transformations
+        if label is None:
+            return img
+        return img, label
