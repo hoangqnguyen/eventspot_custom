@@ -15,7 +15,6 @@ from pytorch_lightning.loggers import TensorBoardLogger
 
 # Import your custom modules
 from dataset import get_dataloaders
-
 from model import SimpleVideoTFModel
 from loss import HungarianMatcher, SetCriterion
 from utils import load_config, update_config, get_num_classes, create_experiment_dir

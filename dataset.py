@@ -4,7 +4,7 @@ import os
 import json
 import random
 from concurrent.futures import ThreadPoolExecutor
-from transform import get_transforms
+from transform import get_cpu_transforms
 import matplotlib.pyplot as plt
 import matplotlib.patches as patches
 import torch
@@ -299,11 +299,11 @@ def get_dataloaders(config):
     """
 
     # Define transforms for training and validation
-    train_transforms = get_transforms(
+    train_transforms = get_cpu_transforms(
         split="train",
         frame_size=tuple(config.frame_size),
     )
-    val_transforms = get_transforms(
+    val_transforms = get_cpu_transforms(
         split="val",
         frame_size=tuple(config.frame_size),
     )

@@ -5,7 +5,7 @@ from torch import nn
 import pytorch_lightning as pl
 import torch.nn.functional as F
 import timm
-
+from transform import get_gpu_transforms
 from loss import HungarianMatcher, SetCriterion
 
 
@@ -118,6 +118,12 @@ class SimpleVideoTFModel(pl.LightningModule):
             num_classes=self.num_classes,
             losses=["labels", "frames", "xy"],
         )
+        
+        self.gpu_transform = {
+            "train": get_gpu_transforms("train"),
+            "val": get_gpu_transforms("val"),
+            "test": get_gpu_transforms("test"),
+        }
 
     def print_model_stats(self):
         """
@@ -137,6 +143,13 @@ class SimpleVideoTFModel(pl.LightningModule):
         print(f"Learning Rate: {self.learning_rate}")
         print(f"{'=' * 40}\n")
 
+    def _apply_gpu_transform(self, x, mode="train"):
+        # print(f"Applying GPU transforms for mode: {mode}")
+        xs = []
+        for b in range(x.shape[0]):
+            xs.append(self.gpu_transform[mode](x[b]))
+        return torch.stack(xs, dim=0)
+
     def forward(self, x):
         """
         Forward pass of the model.
@@ -151,8 +164,11 @@ class SimpleVideoTFModel(pl.LightningModule):
         """
         B, T, C, H, W = x.shape
 
+        x = self._apply_gpu_transform(x, mode="train" if self.training else "val")
+
         # Reshape to (B*T, C, H, W) to process each frame individually
         x = x.view(B * T, C, H, W)  # (B*T, C, H, W)
+
 
         # Extract features using the backbone
         features = self.backbone(x)[
@@ -196,7 +212,7 @@ class SimpleVideoTFModel(pl.LightningModule):
 
         return logits, frames, coords
 
-    def predict(self, x):
+    def predict(self, x, mode="train"):
         """
         Predicts the class labels, frame indices, and xy coordinates for the input sequence.
 
@@ -237,6 +253,7 @@ class SimpleVideoTFModel(pl.LightningModule):
             targets.append(target)
 
         # Forward pass
+        # images = self._apply_gpu_transform(images, mode="train")
         logits, frames_pred, coords = self.predict(
             images
         )  # logits: (B, num_queries, num_classes)
@@ -282,6 +299,7 @@ class SimpleVideoTFModel(pl.LightningModule):
             targets.append(target)
 
         # Forward pass
+        # images = self._apply_gpu_transform(images, mode="val")
         logits, frames_pred, coords = self.predict(images)
 
         # Prepare outputs for SetCriterion
