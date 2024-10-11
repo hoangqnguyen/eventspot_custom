@@ -268,20 +268,22 @@ class VolleyballVideoDataset(Dataset):
         max_events_per_sequence = max(events_per_sequence) if events_per_sequence else 0
 
         table_data = [
-            ["Total Sequences", total_sequences],
-            ["Total Frames", total_frames],
-            ["Total Events", total_events],
+            ["Total Sequences", f"{total_sequences:,}"],
+            ["Total Frames", f"{total_frames:,}"],
+            ["Total Events", f"{total_events:,}"],
             ["Avg Frames/Sequence", f"{total_frames / total_sequences:.2f}"],
             ["Avg Events/Sequence", f"{total_events / total_sequences:.2f}"],
-            ["Min Events/Sequence", min_events_per_sequence],
-            ["Max Events/Sequence", max_events_per_sequence],
+            ["Min Events/Sequence", f"{min_events_per_sequence:,}"],
+            ["Max Events/Sequence", f"{max_events_per_sequence:,}"],
         ]
 
+        print(f"\n{'=' * 40}")
         print(
             tabulate(
                 table_data, headers=["Metric", "Value"], tablefmt="rounded_outline"
             )
         )
+        print(f"{'=' * 40}")
 
 
 def get_dataloaders(config):
@@ -516,7 +518,7 @@ if __name__ == "__main__":
         json_file="data/kovo_288p/train.json",
         frames_dir="data/kovo_288p/frames",
         classes_file="data/kovo_288p/class.txt",
-        transform=get_transforms(split="test"),
+        transform=get_cpu_transforms(split="test"),
         window_size=64,
         stride=8,
         num_events=10,
@@ -524,6 +526,7 @@ if __name__ == "__main__":
     )
 
     dataset = VolleyballVideoDataset(**configs)
+    dataset.print_stats()
     dataloader = DataLoader(
         dataset, batch_size=4, shuffle=True, num_workers=4, collate_fn=custom_collate_fn
     )

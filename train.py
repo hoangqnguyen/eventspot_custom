@@ -15,7 +15,7 @@ from pytorch_lightning.loggers import TensorBoardLogger
 from dataset import get_dataloaders
 from model import SimpleVideoTFModel
 from loss import HungarianMatcher, SetCriterion
-from utils import load_config, update_config, get_num_classes, create_experiment_dir
+from utils import load_config, update_config, get_num_classes, create_experiment_dir, DoNothing
 
 
 def train(config_path="configs/base_kovo.py", ckpt_path=None, **overrides):
@@ -108,9 +108,11 @@ def train(config_path="configs/base_kovo.py", ckpt_path=None, **overrides):
         patience=config.early_stop_patience,
         verbose=True,
         mode="min",
-    )
+    ) if config.early_stop_patience > 0 else DoNothing()
 
     lr_monitor = LearningRateMonitor(logging_interval="step")
+
+    model.print_model_stats()
 
     # Instantiate the PyTorch Lightning Trainer
     trainer = pl.Trainer(

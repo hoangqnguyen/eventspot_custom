@@ -7,6 +7,7 @@ import torch.nn.functional as F
 import timm
 from transform import get_gpu_transforms
 from loss import HungarianMatcher, SetCriterion
+from tabulate import tabulate
 
 
 class SimpleVideoTFModel(pl.LightningModule):
@@ -76,7 +77,7 @@ class SimpleVideoTFModel(pl.LightningModule):
             dropout=dropout,
         )
         self.transformer_encoder = nn.TransformerEncoder(
-            encoder_layer, num_layers=num_encoder_layers
+            encoder_layer, num_layers=num_encoder_layers, enable_nested_tensor=False
         )
 
         # Learnable queries for the number of events
@@ -131,20 +132,22 @@ class SimpleVideoTFModel(pl.LightningModule):
         """
         num_params = sum(p.numel() for p in self.parameters() if p.requires_grad)
         backbone_name = type(self.backbone).__name__
+        stats = [
+            ["Backbone Model", backbone_name],
+            ["Number of Parameters", f"{num_params:,}"],
+            ["Hidden Dimension", self.hidden_dim],
+            ["Transformer Encoder Layers", self.transformer_encoder.num_layers],
+            ["Transformer Decoder Layers", self.transformer_decoder.num_layers],
+            ["Number of Queries (Events)", self.num_queries],
+            ["Number of Classes", self.num_classes],
+            ["Learning Rate", self.learning_rate],
+        ]
         print(f"\n{'=' * 40}")
         print(f"Model Summary for {self.__class__.__name__}:")
-        print(f"Backbone Model: {backbone_name}")
-        print(f"Number of Parameters: {num_params:,}")
-        print(f"Hidden Dimension: {self.hidden_dim}")
-        print(f"Transformer Encoder Layers: {self.transformer_encoder.num_layers}")
-        print(f"Transformer Decoder Layers: {self.transformer_decoder.num_layers}")
-        print(f"Number of Queries (Events): {self.num_queries}")
-        print(f"Number of Classes: {self.num_classes}")
-        print(f"Learning Rate: {self.learning_rate}")
+        print(tabulate(stats, headers=["Attribute", "Value"], tablefmt="fancy_grid"))
         print(f"{'=' * 40}\n")
 
     def _apply_gpu_transform(self, x, mode="train"):
-        # print(f"Applying GPU transforms for mode: {mode}")
         xs = []
         for b in range(x.shape[0]):
             xs.append(self.gpu_transform[mode](x[b]))

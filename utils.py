@@ -7,7 +7,16 @@ import gzip
 import importlib.util
 from pathlib import Path
 from typing import Optional, Type
+from easydict import EasyDict
+from pytorch_lightning.callbacks import Callback
 
+
+class DoNothing(Callback):
+    def on_train_start(self, trainer, pl_module):
+        pass
+
+    def on_train_end(self, trainer, pl_module):
+        pass
 
 def load_json(fpath):
     with open(fpath) as fp:
@@ -86,18 +95,38 @@ class Timer:
 
 def load_config(config_path):
     """
-    Dynamically loads a Python config file and returns the config dictionary.
+    Dynamically loads a configuration file (Python, JSON, or YAML) and returns the config dictionary.
 
     Args:
-        config_path (str): Path to the config Python file.
+        config_path (str): Path to the config file (.py, .json, or .yaml/.yml).
 
     Returns:
         EasyDict: Configuration dictionary.
     """
-    spec = importlib.util.spec_from_file_location("config", config_path)
-    config_module = importlib.util.module_from_spec(spec)
-    spec.loader.exec_module(config_module)
-    return config_module.config
+    file_extension = os.path.splitext(config_path)[-1].lower()
+
+    if file_extension == ".py":
+        # Load Python config file
+        spec = importlib.util.spec_from_file_location("config", config_path)
+        config_module = importlib.util.module_from_spec(spec)
+        spec.loader.exec_module(config_module)
+        return EasyDict(config_module.config)
+
+    elif file_extension == ".json":
+        # Load JSON config file
+        with open(config_path, "r") as f:
+            config_dict = json.load(f)
+        return EasyDict(config_dict)
+
+    elif file_extension in [".yaml", ".yml"]:
+        # Load YAML config file
+        with open(config_path, "r") as f:
+            config_dict = yaml.safe_load(f)
+        return EasyDict(config_dict)
+
+    else:
+        raise ValueError("Unsupported config file format. Use .py, .json, or .yaml/.yml")
+
 
 
 def update_config(config, overrides):
