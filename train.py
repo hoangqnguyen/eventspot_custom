@@ -15,7 +15,7 @@ from pytorch_lightning.loggers import TensorBoardLogger
 from dataset import get_dataloaders
 from model import SimpleVideoTFModel
 from loss import HungarianMatcher, SetCriterion
-from utils import load_config, update_config, get_num_classes, create_experiment_dir, DoNothing
+from utils import load_config, update_config, get_num_classes, create_experiment_dir, find_latest_checkpoint, DoNothing
 
 
 def train(config_path="configs/base_kovo.py", resume_exp_dir=None, **overrides):
@@ -40,16 +40,16 @@ def train(config_path="configs/base_kovo.py", resume_exp_dir=None, **overrides):
 
     # Determine if we are resuming from an existing experiment
     ckpt_path = None
-    if exp_resume_dir:
+    if resume_exp_dir:
         # Find the latest or best checkpoint to resume from
-        ckpt_path = find_latest_checkpoint(exp_resume_dir)
+        ckpt_path = find_latest_checkpoint(resume_exp_dir)
         if ckpt_path:
             print(f"Resuming training from checkpoint: {ckpt_path}")
         else:
-            print(f"No valid checkpoint found in {exp_resume_dir}, starting fresh.")
+            print(f"No valid checkpoint found in {resume_exp_dir}, starting fresh.")
 
     # Create a unique experiment directory if not resuming
-    experiment_dir = create_experiment_dir(config) if not exp_resume_dir else exp_resume_dir
+    experiment_dir = create_experiment_dir(config) if not resume_exp_dir else resume_exp_dir
     print(f"Experiment directory: {experiment_dir}")
 
     # Set random seed for reproducibility
@@ -143,34 +143,6 @@ def train(config_path="configs/base_kovo.py", resume_exp_dir=None, **overrides):
     trainer.save_checkpoint(final_model_path)
     print(f"Final model saved to {final_model_path}")
 
-
-def find_latest_checkpoint(exp_dir):
-    """
-    Finds the latest or best checkpoint in the given experiment directory.
-
-    Args:
-        exp_dir (str): Path to the experiment directory.
-
-    Returns:
-        str: Path to the latest or best checkpoint file, or None if not found.
-    """
-    checkpoints_dir = Path(exp_dir) / "checkpoints"
-    if not checkpoints_dir.exists():
-        print(f"No checkpoint directory found in {exp_dir}.")
-        return None
-
-    # Search for final model or best model checkpoint
-    final_ckpt = checkpoints_dir.parent / "final_model.ckpt"
-    if final_ckpt.exists():
-        return str(final_ckpt)
-
-    # If no final model, return the latest or best checkpoint based on modification time
-    checkpoint_files = sorted(checkpoints_dir.glob("*.ckpt"), key=os.path.getmtime)
-    if checkpoint_files:
-        return str(checkpoint_files[-1])  # Return the most recent checkpoint
-
-    print(f"No checkpoints found in {checkpoints_dir}.")
-    return None
 
 
 def main():
