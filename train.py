@@ -9,7 +9,7 @@ from pytorch_lightning.callbacks import (
     EarlyStopping,
     LearningRateMonitor,
 )
-from pytorch_lightning.loggers import TensorBoardLogger
+from pytorch_lightning.loggers import TensorBoardLogger, CSVLogger
 
 # Import your custom modules
 from dataset import get_dataloaders
@@ -98,10 +98,16 @@ def train(config_path="configs/base_kovo.py", resume_exp_dir=None, **overrides):
     )
 
     # Setup TensorBoard logger
-    logger = TensorBoardLogger(
+    tb_logger = TensorBoardLogger(
         save_dir=str(Path(config.log_dir) / "video_model"),
         name="",
         version=None,  # Let Lightning handle versioning
+    )
+
+    # Setup CSV logger
+    csv_logger = CSVLogger(
+        save_dir=str(Path(config.log_dir) / "csv_logs"),
+        name="csv_logs",
     )
 
     # Setup callbacks
@@ -128,7 +134,7 @@ def train(config_path="configs/base_kovo.py", resume_exp_dir=None, **overrides):
     trainer = pl.Trainer(
         max_epochs=config.max_epochs,
         accelerator="auto",
-        logger=logger,
+        logger=[tb_logger, csv_logger],  # Add both TensorBoard and CSV loggers
         callbacks=[checkpoint_callback, early_stop_callback, lr_monitor],
         log_every_n_steps=50,
         gradient_clip_val=0.1,  # Optional: gradient clipping
@@ -142,7 +148,6 @@ def train(config_path="configs/base_kovo.py", resume_exp_dir=None, **overrides):
     final_model_path = os.path.join(experiment_dir, "final_model.ckpt")
     trainer.save_checkpoint(final_model_path)
     print(f"Final model saved to {final_model_path}")
-
 
 
 def main():
