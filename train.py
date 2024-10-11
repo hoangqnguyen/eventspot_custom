@@ -141,6 +141,7 @@ def train(config_path="configs/base_kovo.py", resume_exp_dir=None, **overrides):
         accumulate_grad_batches=config.gradient_accumulation_steps,
     )
 
+    model = torch.compile(model, mode="reduce-overhead") if config.compile else model
     # Start training from the checkpoint if found, otherwise start from scratch
     trainer.fit(model, train_loader, val_loader, ckpt_path=ckpt_path)
 

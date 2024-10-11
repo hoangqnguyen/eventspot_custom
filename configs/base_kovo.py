@@ -29,6 +29,7 @@ config = edict({
     "num_decoder_layers": 3,
     "dim_feedforward": 512,
     "dropout": 0.1,
+    "compile": False,
 
     # **Loss Parameters**
     "cost_class": 1.0,
