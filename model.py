@@ -108,8 +108,7 @@ class SimpleVideoTFModel(pl.LightningModule):
 
         self.gpu_transform = {
             "train": get_gpu_transforms("train"),
-            "val": get_gpu_transforms("val"),
-            "test": get_gpu_transforms("test"),
+            "val": get_gpu_transforms("val")
         }
 
     def print_model_stats(self):
