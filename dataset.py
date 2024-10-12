@@ -277,13 +277,12 @@ class VolleyballVideoDataset(Dataset):
             ["Max Events/Sequence", f"{max_events_per_sequence:,}"],
         ]
 
-        print(f"\n{'=' * 40}")
         print(
             tabulate(
                 table_data, headers=["Metric", "Value"], tablefmt="rounded_outline"
             )
         )
-        print(f"{'=' * 40}")
+        print(f"{'-' * 40}")
 
 
 def get_dataloaders(config):

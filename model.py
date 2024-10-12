@@ -20,6 +20,7 @@ class SimpleVideoTFModel(pl.LightningModule):
         learning_rate=3e-4,
         learning_rate_backbone=3e-4,
         weight_decay=1e-4,
+        lr_drop=200,
         backbone_out_channels=None,
         hidden_dim=256,
         nheads=8,
@@ -27,7 +28,6 @@ class SimpleVideoTFModel(pl.LightningModule):
         num_decoder_layers=3,
         dim_feedforward=512,
         dropout=0.1,
-        lr_drop=200,
         **config,
     ):
         """
