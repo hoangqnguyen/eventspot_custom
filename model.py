@@ -208,7 +208,7 @@ class SimpleVideoTFModel(pl.LightningModule):
             x (torch.Tensor): Input tensor of shape (B, T, C, H, W).
 
         Returns:
-            dict: Dictionary containing 'logits', 'frames', 'xy' tensors.
+            dict: Dictionary containing losses.
         """        
         images = batch["images"]  # (B, T, C, H, W)
         labels = batch["label"]  # (B, num_events)
@@ -227,7 +227,6 @@ class SimpleVideoTFModel(pl.LightningModule):
             targets.append(target)
 
         # Forward pass
-        # images = self._apply_gpu_transform(images, mode="train")
         logits, frames_pred, coords = self.forward(images)
 
         # Prepare outputs for SetCriterion
