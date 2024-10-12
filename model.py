@@ -8,7 +8,6 @@ import timm
 from transform import get_gpu_transforms
 from loss import HungarianMatcher, SetCriterion
 from tabulate import tabulate
-from easydict import EasyDict
 
 
 class SimpleVideoTFModel(pl.LightningModule):
@@ -105,7 +104,7 @@ class SimpleVideoTFModel(pl.LightningModule):
         self.coord_embed = nn.Linear(hidden_dim, 2)
 
         # Initialize Matcher and Criterion
-        self.criterion = get_criterion(EasyDict(num_classes=num_classes, **config))
+        self.criterion = get_criterion(num_classes=num_classes, **config)
 
         self.gpu_transform = {
             "train": get_gpu_transforms("train"),
@@ -337,7 +336,9 @@ class SimpleVideoTFModel(pl.LightningModule):
         sch = self.lr_schedulers()
 
 
-def get_criterion(config):
+def get_criterion(
+    cost_class, cost_frame, cost_coord, eos_coef, num_classes, weight_dict, **kwargs
+):
     """
     Returns the criterion for the given configuration.
 
@@ -349,16 +350,16 @@ def get_criterion(config):
     """
     # Initialize Matcher and Criterion
     matcher = HungarianMatcher(
-        cost_class=config.cost_class,
-        cost_frame=config.cost_frame,
-        cost_coord=config.cost_coord,
+        cost_class=cost_class,
+        cost_frame=cost_frame,
+        cost_coord=cost_coord,
     )
 
     criterion = SetCriterion(
         matcher=matcher,
-        eos_coef=config.eos_coef,
-        num_classes=config.num_classes,
-        weight_dict=config.weight_dict,
+        eos_coef=eos_coef,
+        num_classes=num_classes,
+        weight_dict=weight_dict,
         losses=["labels", "frames", "xy"],
     )
 
