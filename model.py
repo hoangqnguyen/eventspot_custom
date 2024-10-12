@@ -328,12 +328,9 @@ class SimpleVideoTFModel(pl.LightningModule):
         return {
             "optimizer": optimizer,
             "lr_scheduler": torch.optim.lr_scheduler.StepLR(
-                optimizer, self.lr_drop, verbose=True
+                optimizer, self.lr_drop
             ),
         }
-
-    def on_train_epoch_end(self):
-        self.lr_schedulers().step()
 
 
 def get_criterion(
