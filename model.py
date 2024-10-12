@@ -333,7 +333,7 @@ class SimpleVideoTFModel(pl.LightningModule):
         }
 
     def on_train_epoch_end(self):
-        sch = self.lr_schedulers()
+        self.lr_schedulers().step()
 
 
 def get_criterion(
