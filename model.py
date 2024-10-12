@@ -200,7 +200,7 @@ class SimpleVideoTFModel(pl.LightningModule):
 
         return logits, frames, coords
 
-    def predict(self, x, mode="train"):
+    def common_step(self, batch, batch_idx):
         """
         Predicts the class labels, frame indices, and xy coordinates for the input sequence.
 
@@ -209,21 +209,7 @@ class SimpleVideoTFModel(pl.LightningModule):
 
         Returns:
             dict: Dictionary containing 'logits', 'frames', 'xy' tensors.
-        """
-        logits, frames, coords = self(x)
-        return logits, frames.sigmoid(), coords.sigmoid()
-
-    def training_step(self, batch, batch_idx):
-        """
-        Training step.
-
-        Args:
-            batch (dict): Batch dictionary containing 'images', 'frame', 'label', 'xy', 'event_mask'.
-            batch_idx (int): Batch index.
-
-        Returns:
-            torch.Tensor: Training loss.
-        """
+        """        
         images = batch["images"]  # (B, T, C, H, W)
         labels = batch["label"]  # (B, num_events)
         frames_gt = batch["frame"]  # (B, num_events)
@@ -242,19 +228,31 @@ class SimpleVideoTFModel(pl.LightningModule):
 
         # Forward pass
         # images = self._apply_gpu_transform(images, mode="train")
-        logits, frames_pred, coords = self.predict(
-            images
-        )  # logits: (B, num_queries, num_classes)
+        logits, frames_pred, coords = self.forward(images)
 
         # Prepare outputs for SetCriterion
         outputs = {
             "logits": logits,  # (B, num_queries, num_classes)
-            "frames": frames_pred,  # (B, num_queries)
-            "xy": coords,  # (B, num_queries, 2)
+            "frames": frames_pred.sigmoid(),  # (B, num_queries)
+            "xy": coords.sigmoid(),  # (B, num_queries, 2)
         }
 
         # Compute loss
         loss_dict = self.criterion(outputs, targets)
+        return loss_dict
+
+    def training_step(self, batch, batch_idx):
+        """
+        Training step.
+
+        Args:
+            batch (dict): Batch dictionary containing 'images', 'frame', 'label', 'xy', 'event_mask'.
+            batch_idx (int): Batch index.
+
+        Returns:
+            torch.Tensor: Training loss.
+        """
+        loss_dict = self.common_step(batch, batch_idx)
 
         # Log the losses
         for k, v in loss_dict.items():
@@ -270,35 +268,7 @@ class SimpleVideoTFModel(pl.LightningModule):
             batch (dict): Batch dictionary containing 'images', 'frame', 'label', 'xy', 'event_mask'.
             batch_idx (int): Batch index.
         """
-        images = batch["images"]  # (B, T, C, H, W)
-        labels = batch["label"]  # (B, num_events)
-        frames_gt = batch["frame"]  # (B, num_events)
-        xy_gt = batch["xy"]  # (B, num_events, 2)
-        event_mask = batch["event_mask"]  # (B, num_events)
-
-        # Prepare targets for SetCriterion
-        targets = []
-        for b in range(images.shape[0]):
-            target = {}
-            valid = event_mask[b].bool()
-            target["labels"] = labels[b][valid]  # (num_valid_events,)
-            target["frames"] = frames_gt[b][valid]  # (num_valid_events,)
-            target["xy"] = xy_gt[b][valid]  # (num_valid_events, 2)
-            targets.append(target)
-
-        # Forward pass
-        # images = self._apply_gpu_transform(images, mode="val")
-        logits, frames_pred, coords = self.predict(images)
-
-        # Prepare outputs for SetCriterion
-        outputs = {
-            "logits": logits,  # (B, num_queries, num_classes)
-            "frames": frames_pred,  # (B, num_queries)
-            "xy": coords,  # (B, num_queries, 2)
-        }
-
-        # Compute loss
-        loss_dict = self.criterion(outputs, targets)
+        loss_dict = self.common_step(batch, batch_idx)
 
         # Log the losses
         for k, v in loss_dict.items():
@@ -416,7 +386,7 @@ if __name__ == "__main__":
     }
 
     # Forward pass
-    logits, frames_pred, coords = model.predict(dummy_batch["images"])
+    logits, frames_pred, coords = model.common_step(dummy_batch["images"])
     print("Logits shape:", logits.shape)  # Expected: (2, num_queries, num_classes)
     print("Frames_pred shape:", frames_pred.shape)  # Expected: (2, num_queries)
     print("Coords shape:", coords.shape)  # Expected: (2, num_queries, 2)
