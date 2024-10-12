@@ -8,6 +8,7 @@ import timm
 from transform import get_gpu_transforms
 from loss import HungarianMatcher, SetCriterion
 from tabulate import tabulate
+from easydict import EasyDict
 
 
 class SimpleVideoTFModel(pl.LightningModule):
@@ -18,6 +19,8 @@ class SimpleVideoTFModel(pl.LightningModule):
         backbone_name="regnety_002",
         pretrained=True,
         learning_rate=3e-4,
+        learning_rate_backbone=3e-4,
+        weight_decay=1e-4,
         backbone_out_channels=None,
         hidden_dim=256,
         nheads=8,
@@ -25,10 +28,8 @@ class SimpleVideoTFModel(pl.LightningModule):
         num_decoder_layers=3,
         dim_feedforward=512,
         dropout=0.1,
-        matcher=None,
-        weight_dict=None,
-        criterion=None,
-        eos_coef=0.1,
+        lr_drop=200,
+        **config,
     ):
         """
         Initializes the SimpleVideoTFModel.
@@ -53,6 +54,10 @@ class SimpleVideoTFModel(pl.LightningModule):
         """
         super(SimpleVideoTFModel, self).__init__()
         self.learning_rate = learning_rate
+        self.learning_rate_backbone = learning_rate_backbone
+        self.weight_decay = weight_decay
+        self.lr_drop = lr_drop
+
         self.num_classes = num_classes
         self.num_queries = num_queries  # Number of events to predict per sequence
         self.hidden_dim = hidden_dim
@@ -100,26 +105,8 @@ class SimpleVideoTFModel(pl.LightningModule):
         self.coord_embed = nn.Linear(hidden_dim, 2)
 
         # Initialize Matcher and Criterion
-        if matcher is None:
-            self.matcher = HungarianMatcher(
-                cost_class=1.0, cost_frame=1.0, cost_coord=1.0
-            )
-        else:
-            self.matcher = matcher
+        self.criterion = get_criterion(EasyDict(num_classes=num_classes, **config))
 
-        if weight_dict is None:
-            self.weight_dict = {"loss_ce": 1.0, "loss_frame": 1.0, "loss_xy": 1.0}
-        else:
-            self.weight_dict = weight_dict
-
-        self.criterion = criterion or SetCriterion(
-            matcher=self.matcher,
-            weight_dict=self.weight_dict,
-            eos_coef=eos_coef,
-            num_classes=self.num_classes,
-            losses=["labels", "frames", "xy"],
-        )
-        
         self.gpu_transform = {
             "train": get_gpu_transforms("train"),
             "val": get_gpu_transforms("val"),
@@ -171,7 +158,6 @@ class SimpleVideoTFModel(pl.LightningModule):
 
         # Reshape to (B*T, C, H, W) to process each frame individually
         x = x.view(B * T, C, H, W)  # (B*T, C, H, W)
-
 
         # Extract features using the backbone
         features = self.backbone(x)[
@@ -321,13 +307,62 @@ class SimpleVideoTFModel(pl.LightningModule):
 
     def configure_optimizers(self):
         """
-        Configures the optimizer.
+        Configures the optimizer with separate learning rates for backbone and other layers.
 
         Returns:
             torch.optim.Optimizer: Configured optimizer.
         """
-        optimizer = torch.optim.Adam(self.parameters(), lr=self.learning_rate)
-        return optimizer
+        # Parameters with separate learning rate for the backbone
+        backbone_params = list(self.backbone.parameters())
+        non_backbone_params = [
+            p for n, p in self.named_parameters() if not n.startswith("backbone")
+        ]
+
+        optimizer = torch.optim.AdamW(
+            [
+                {"params": backbone_params, "lr": self.learning_rate_backbone},
+                {"params": non_backbone_params, "lr": self.learning_rate},
+            ],
+            lr=self.learning_rate,
+            weight_decay=self.weight_decay,
+        )
+        return {
+            "optimizer": optimizer,
+            "lr_scheduler": torch.optim.lr_scheduler.StepLR(
+                optimizer, self.lr_drop, verbose=True
+            ),
+        }
+
+    def on_train_epoch_end(self):
+        sch = self.lr_schedulers()
+
+
+def get_criterion(config):
+    """
+    Returns the criterion for the given configuration.
+
+    Args:
+        config (dict): Configuration dictionary.
+
+    Returns:
+        SetCriterion: Criterion for the model.
+    """
+    # Initialize Matcher and Criterion
+    matcher = HungarianMatcher(
+        cost_class=config.cost_class,
+        cost_frame=config.cost_frame,
+        cost_coord=config.cost_coord,
+    )
+
+    criterion = SetCriterion(
+        matcher=matcher,
+        eos_coef=config.eos_coef,
+        num_classes=config.num_classes,
+        weight_dict=config.weight_dict,
+        losses=["labels", "frames", "xy"],
+    )
+
+    return criterion
 
 
 if __name__ == "__main__":

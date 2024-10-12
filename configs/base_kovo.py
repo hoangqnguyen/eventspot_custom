@@ -14,8 +14,11 @@ config = edict({
     "batch_size": 8,
     "val_batch_size": 4,
     "num_workers": 8,
-    "learning_rate": 3e-4,
-    "max_epochs": 50,
+    "learning_rate": 1e-4,
+    "learning_rate_backbone": 1e-5,
+    "lr_drop": 200,
+    "weight_decay": 1e-4,
+    "max_epochs": 300,
     "seed": 42,
     "gradient_accumulation_steps": 8,
 

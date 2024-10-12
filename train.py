@@ -15,7 +15,14 @@ from pytorch_lightning.loggers import TensorBoardLogger, CSVLogger
 from dataset import get_dataloaders
 from model import SimpleVideoTFModel
 from loss import HungarianMatcher, SetCriterion
-from utils import load_config, update_config, get_num_classes, create_experiment_dir, find_latest_checkpoint, DoNothing
+from utils import (
+    load_config,
+    update_config,
+    get_num_classes,
+    create_experiment_dir,
+    find_latest_checkpoint,
+    DoNothing,
+)
 
 
 def train(config_path="configs/base_kovo.py", resume_exp_dir=None, **overrides):
@@ -49,7 +56,9 @@ def train(config_path="configs/base_kovo.py", resume_exp_dir=None, **overrides):
             print(f"No valid checkpoint found in {resume_exp_dir}, starting fresh.")
 
     # Create a unique experiment directory if not resuming
-    experiment_dir = create_experiment_dir(config) if not resume_exp_dir else resume_exp_dir
+    experiment_dir = (
+        create_experiment_dir(config) if not resume_exp_dir else resume_exp_dir
+    )
     print(f"Experiment directory: {experiment_dir}")
 
     # Set random seed for reproducibility
@@ -57,45 +66,8 @@ def train(config_path="configs/base_kovo.py", resume_exp_dir=None, **overrides):
 
     train_loader, val_loader, test_loader = get_dataloaders(config)
 
-    # Initialize Matcher and Criterion
-    matcher = HungarianMatcher(
-        cost_class=config.cost_class,
-        cost_frame=config.cost_frame,
-        cost_coord=config.cost_coord,
-    )
-
-    weight_dict = {
-        "loss_ce": config.weight_dict.get("loss_ce", 1.0),
-        "loss_frame": config.weight_dict.get("loss_frame", 1.0),
-        "loss_xy": config.weight_dict.get("loss_xy", 1.0),
-    }
-
-    criterion = SetCriterion(
-        matcher=matcher,
-        weight_dict=weight_dict,
-        eos_coef=config.eos_coef,
-        num_classes=config.num_classes,
-        losses=["labels", "frames", "xy"],
-    )
-
     # Instantiate the model
-    model = SimpleVideoTFModel(
-        num_classes=config.num_classes,
-        num_queries=config.num_queries,
-        backbone_name=config.backbone_name,
-        pretrained=config.pretrained,
-        learning_rate=config.learning_rate,
-        hidden_dim=config.hidden_dim,
-        nheads=config.nheads,
-        num_encoder_layers=config.num_encoder_layers,
-        num_decoder_layers=config.num_decoder_layers,
-        dim_feedforward=config.dim_feedforward,
-        dropout=config.dropout,
-        matcher=matcher,
-        weight_dict=weight_dict,
-        eos_coef=config.eos_coef,
-        criterion=criterion,
-    )
+    model = SimpleVideoTFModel(**config)
 
     # Setup TensorBoard logger
     tb_logger = TensorBoardLogger(
@@ -119,12 +91,16 @@ def train(config_path="configs/base_kovo.py", resume_exp_dir=None, **overrides):
         mode="min",
     )
 
-    early_stop_callback = EarlyStopping(
-        monitor="loss",
-        patience=config.early_stop_patience,
-        verbose=True,
-        mode="min",
-    ) if config.early_stop_patience > 0 else DoNothing()
+    early_stop_callback = (
+        EarlyStopping(
+            monitor="loss",
+            patience=config.early_stop_patience,
+            verbose=True,
+            mode="min",
+        )
+        if config.early_stop_patience > 0
+        else DoNothing()
+    )
 
     lr_monitor = LearningRateMonitor(logging_interval="step")
 
@@ -141,7 +117,9 @@ def train(config_path="configs/base_kovo.py", resume_exp_dir=None, **overrides):
         accumulate_grad_batches=config.gradient_accumulation_steps,
     )
 
-    model = torch.compile(model, mode="reduce-overhead") if config.compile else model # torch.compile is failing, so don't enable it for now
+    model = (
+        torch.compile(model, mode="reduce-overhead") if config.compile else model
+    )  # torch.compile is failing, so don't enable it for now
     # Start training from the checkpoint if found, otherwise start from scratch
     trainer.fit(model, train_loader, val_loader, ckpt_path=ckpt_path)
 
