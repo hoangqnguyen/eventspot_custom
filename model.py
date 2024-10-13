@@ -36,9 +36,12 @@ class SimpleVideoTFModel(pl.LightningModule):
         Args:
             num_classes (int): Number of target classes for classification.
             num_queries (int): Number of event queries.
-            backbone_name (str): Name of the backbone model from timm.
+            backbone (str): Name of the backbone model from timm.
             pretrained (bool): Whether to use pretrained weights for the backbone.
             learning_rate (float): Learning rate for the optimizer.
+            learning_rate_backbone (float): Learning rate for the backbone optimizer.
+            weight_decay (float): Weight decay for the optimizer.
+            lr_drop (int): Epoch interval for learning rate decay.
             backbone_out_channels (int, optional): Number of output channels from the backbone.
                 If None, it will be inferred from the backbone.
             hidden_dim (int): Dimension of the features after projection.
@@ -47,11 +50,12 @@ class SimpleVideoTFModel(pl.LightningModule):
             num_decoder_layers (int): Number of layers in the Transformer decoder.
             dim_feedforward (int): Dimension of the feedforward network in Transformer layers.
             dropout (float): Dropout rate in Transformer layers.
-            matcher (HungarianMatcher, optional): Matcher for assigning predictions to targets.
-            weight_dict (dict, optional): Weights for different loss components.
-            eos_coef (float): Weight for the no-object class in classification.
+            **config: Additional configuration parameters.
         """
         super(SimpleVideoTFModel, self).__init__()
+        self.save_hyperparameters()  # Saves all hyperparameters to the checkpoint
+
+        # Hyperparameters
         self.learning_rate = learning_rate
         self.learning_rate_backbone = learning_rate_backbone
         self.weight_decay = weight_decay
@@ -106,6 +110,7 @@ class SimpleVideoTFModel(pl.LightningModule):
         # Initialize Matcher and Criterion
         self.criterion = get_criterion(num_classes=num_classes, **config)
 
+        # GPU-specific transformations
         self.gpu_transform = {
             "train": get_gpu_transforms("train"),
             "val": get_gpu_transforms("val"),
@@ -133,6 +138,19 @@ class SimpleVideoTFModel(pl.LightningModule):
         print(f"{'=' * 40}\n")
 
     def _apply_gpu_transform(self, x, mode="train"):
+        """
+        Applies GPU-specific transformations to the input batch.
+
+        Args:
+            x (torch.Tensor): Input tensor of shape (B, T, C, H, W).
+            mode (str): Mode of transformation ('train' or 'val').
+
+        Returns:
+            torch.Tensor: Transformed tensor.
+        """
+        # Apply transformations in a vectorized manner if possible
+        # Otherwise, apply them individually
+        # Assuming transformations are batch-wise
         xs = []
         for b in range(x.shape[0]):
             xs.append(self.gpu_transform[mode](x[b]))
@@ -158,14 +176,10 @@ class SimpleVideoTFModel(pl.LightningModule):
         x = x.view(B * T, C, H, W)  # (B*T, C, H, W)
 
         # Extract features using the backbone
-        features = self.backbone(x)[
-            0
-        ]  # Assuming the last feature map, shape: (B*T, F, H', W')
+        features = self.backbone(x)[0]  # Assuming the last feature map, shape: (B*T, F, H', W')
 
         # Global Average Pooling to get a feature vector per frame
-        features = (
-            F.adaptive_avg_pool2d(features, (1, 1)).squeeze(-1).squeeze(-1)
-        )  # (B*T, F)
+        features = F.adaptive_avg_pool2d(features, (1, 1)).squeeze(-1).squeeze(-1)  # (B*T, F)
 
         # Project features to a fixed dimension
         features = self.feature_proj(features)  # (B*T, hidden_dim)
@@ -180,14 +194,10 @@ class SimpleVideoTFModel(pl.LightningModule):
         memory = self.transformer_encoder(features)  # (T, B, hidden_dim)
 
         # Prepare queries
-        query_embed = self.query_embed.weight.unsqueeze(1).repeat(
-            1, B, 1
-        )  # (num_queries, B, hidden_dim)
+        query_embed = self.query_embed.weight.unsqueeze(1).repeat(1, B, 1)  # (num_queries, B, hidden_dim)
 
         # Transformer Decoder
-        hs = self.transformer_decoder(
-            query_embed, memory
-        )  # (num_queries, B, hidden_dim)
+        hs = self.transformer_decoder(query_embed, memory)  # (num_queries, B, hidden_dim)
 
         # Transpose to (B, num_queries, hidden_dim)
         hs = hs.permute(1, 0, 2)  # (B, num_queries, hidden_dim)
@@ -204,11 +214,12 @@ class SimpleVideoTFModel(pl.LightningModule):
         Predicts the class labels, frame indices, and xy coordinates for the input sequence.
 
         Args:
-            x (torch.Tensor): Input tensor of shape (B, T, C, H, W).
+            batch (dict): Batch dictionary containing 'images', 'frame', 'label', 'xy', 'event_mask'.
+            batch_idx (int): Batch index.
 
         Returns:
             dict: Dictionary containing losses.
-        """
+        """        
         images = batch["images"]  # (B, T, C, H, W)
         labels = batch["label"]  # (B, num_events)
         frames_gt = batch["frame"]  # (B, num_events)
@@ -299,9 +310,11 @@ class SimpleVideoTFModel(pl.LightningModule):
             lr=self.learning_rate,
             weight_decay=self.weight_decay,
         )
+        scheduler = torch.optim.lr_scheduler.StepLR(optimizer, self.lr_drop)
+
         return {
             "optimizer": optimizer,
-            "lr_scheduler": torch.optim.lr_scheduler.StepLR(optimizer, self.lr_drop),
+            "lr_scheduler": scheduler,
         }
 
 
@@ -312,7 +325,13 @@ def get_criterion(
     Returns the criterion for the given configuration.
 
     Args:
-        config (dict): Configuration dictionary.
+        cost_class (float): Cost weight for classification.
+        cost_frame (float): Cost weight for frame indices.
+        cost_coord (float): Cost weight for coordinates.
+        eos_coef (float): Weight for the no-object class.
+        num_classes (int): Number of classes.
+        weight_dict (dict): Weights for different loss components.
+        **kwargs: Additional keyword arguments.
 
     Returns:
         SetCriterion: Criterion for the model.
@@ -336,8 +355,28 @@ def get_criterion(
 
 
 if __name__ == "__main__":
+    # **Note:** It's recommended to move testing code to a separate script (e.g., test_model.py)
+    # to maintain separation of concerns. However, if you wish to keep it here, ensure it's correctly implemented.
+
+    # Example Testing Code
+    import torch
+
+    # Define dummy configuration parameters
+    config = {
+        "cost_class": 1.0,
+        "cost_frame": 1.0,
+        "cost_coord": 1.0,
+        "eos_coef": 0.1,
+        "weight_dict": {
+            "loss_ce": 1.0,
+            "loss_frame": 1.0,
+            "loss_xy": 1.0,
+        },
+    }
+
+    # Initialize the model
     num_classes = 10
-    num_queries = 12  # Number of events to predict
+    num_queries = 12
     backbone_name = "regnety_002"
     pretrained = True
     hidden_dim = 256
@@ -358,6 +397,7 @@ if __name__ == "__main__":
         num_decoder_layers=num_decoder_layers,
         dim_feedforward=dim_feedforward,
         dropout=dropout,
+        **config,
     )
 
     model.print_model_stats()
@@ -387,8 +427,8 @@ if __name__ == "__main__":
         "event_mask": dummy_event_mask,
     }
 
-    # Forward pass
-    logits, frames_pred, coords = model.common_step(dummy_batch["images"])
+    # Forward pass to get outputs
+    logits, frames_pred, coords = model.forward(dummy_batch["images"])
     print("Logits shape:", logits.shape)  # Expected: (2, num_queries, num_classes)
     print("Frames_pred shape:", frames_pred.shape)  # Expected: (2, num_queries)
     print("Coords shape:", coords.shape)  # Expected: (2, num_queries, 2)
@@ -403,7 +443,7 @@ if __name__ == "__main__":
         target["xy"] = dummy_xy[b][valid]  # (num_valid_events, 2)
         targets.append(target)
 
-    # Prepare outputs
+    # Prepare outputs for loss computation
     outputs = {"logits": logits, "frames": frames_pred, "xy": coords}
 
     # Initialize Matcher and Criterion
@@ -419,4 +459,8 @@ if __name__ == "__main__":
 
     # Compute losses
     loss_dict = criterion(outputs, targets)
-    print(loss_dict)
+    print("Losses:", loss_dict)
+
+    # Optionally, test the common_step method
+    loss_dict_step = model.common_step(dummy_batch, batch_idx=0)
+    print("Losses from common_step:", loss_dict_step)
