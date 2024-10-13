@@ -37,7 +37,7 @@ config = edict({
     # **Loss Parameters**
     "cost_class": 1.0,
     "cost_frame": 1.0,
-    "cost_coord": 0.0,
+    "cost_coord": 1.0,
     "eos_coef": 0.1,
 
     # **Dataset Parameters**

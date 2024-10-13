@@ -167,7 +167,7 @@ class SetCriterion(nn.Module):
 
         if len(matched_src_frames) == 0:
             # No non-background matches in the entire batch
-            loss_frame = torch.tensor(0.0, device=src_frames.device, requires_grad=True)
+            loss_frame = torch.tensor(0.0, device=src_frames.device)
         else:
             # Concatenate all matched frames across the batch
             matched_src_frames = torch.cat(matched_src_frames)  # (total_non_bg_matched_queries,)
@@ -204,7 +204,7 @@ class SetCriterion(nn.Module):
 
         if len(matched_src_xy) == 0:
             # No non-background matches in the entire batch
-            loss_xy = torch.tensor(0.0, device=src_xy.device, requires_grad=True)
+            loss_xy = torch.tensor(0.0, device=src_xy.device)
         else:
             # Concatenate all matched xy coordinates across the batch
             matched_src_xy = torch.cat(matched_src_xy)  # (total_non_bg_matched_queries, 2)

@@ -84,16 +84,16 @@ def train(config_path="configs/base_kovo.py", resume_exp_dir=None, **overrides):
 
     # Setup callbacks
     checkpoint_callback = ModelCheckpoint(
-        monitor="loss",
+        monitor="val_loss",
         dirpath=config.checkpoint_dir,
-        filename="best-checkpoint-{epoch:02d}-{loss:.4f}",
+        filename="best-checkpoint-{epoch:02d}-{val_loss:.4f}",
         save_top_k=config.save_top_k,
         mode="min",
     )
 
     early_stop_callback = (
         EarlyStopping(
-            monitor="loss",
+            monitor="val_loss",
             patience=config.early_stop_patience,
             verbose=True,
             mode="min",

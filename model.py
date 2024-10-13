@@ -108,7 +108,7 @@ class SimpleVideoTFModel(pl.LightningModule):
 
         self.gpu_transform = {
             "train": get_gpu_transforms("train"),
-            "val": get_gpu_transforms("val")
+            "val": get_gpu_transforms("val"),
         }
 
     def print_model_stats(self):
@@ -208,7 +208,7 @@ class SimpleVideoTFModel(pl.LightningModule):
 
         Returns:
             dict: Dictionary containing losses.
-        """        
+        """
         images = batch["images"]  # (B, T, C, H, W)
         labels = batch["label"]  # (B, num_events)
         frames_gt = batch["frame"]  # (B, num_events)
@@ -252,11 +252,15 @@ class SimpleVideoTFModel(pl.LightningModule):
         """
         loss_dict = self.common_step(batch, batch_idx)
 
-        # Log the losses
-        for k, v in loss_dict.items():
-            self.log(k, v, on_step=True, on_epoch=True, prog_bar=True, logger=True)
+        # Prefix loss keys with 'train_'
+        train_loss_dict = {f"train_{k}": v for k, v in loss_dict.items()}
 
-        return loss_dict["loss"]
+        # Log all training losses
+        self.log_dict(
+            train_loss_dict, on_step=True, on_epoch=True, prog_bar=True, logger=True
+        )
+
+        return loss_dict["loss"]  # Ensure this is the unprefixed 'loss'
 
     def validation_step(self, batch, batch_idx):
         """
@@ -268,9 +272,11 @@ class SimpleVideoTFModel(pl.LightningModule):
         """
         loss_dict = self.common_step(batch, batch_idx)
 
-        # Log the losses
-        for k, v in loss_dict.items():
-            self.log(k, v, on_epoch=True, prog_bar=True, logger=True)
+        # Prefix loss keys with 'val_'
+        val_loss_dict = {f"val_{k}": v for k, v in loss_dict.items()}
+
+        # Log all validation losses
+        self.log_dict(val_loss_dict, on_epoch=True, prog_bar=True, logger=True)
 
     def configure_optimizers(self):
         """
@@ -295,9 +301,7 @@ class SimpleVideoTFModel(pl.LightningModule):
         )
         return {
             "optimizer": optimizer,
-            "lr_scheduler": torch.optim.lr_scheduler.StepLR(
-                optimizer, self.lr_drop
-            ),
+            "lr_scheduler": torch.optim.lr_scheduler.StepLR(optimizer, self.lr_drop),
         }
 
 
