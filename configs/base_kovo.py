@@ -24,7 +24,7 @@ config = edict({
 
     # **Model Parameters**
     "num_queries": 12,
-    "backbone_name": "regnety_002",
+    "backbone": "regnety_002",
     "pretrained": True,
     "hidden_dim": 256,
     "nheads": 8,

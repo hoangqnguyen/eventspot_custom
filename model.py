@@ -15,7 +15,7 @@ class SimpleVideoTFModel(pl.LightningModule):
         self,
         num_classes,
         num_queries=5,
-        backbone_name="regnety_002",
+        backbone="regnety_002",
         pretrained=True,
         learning_rate=3e-4,
         learning_rate_backbone=3e-4,
@@ -63,7 +63,7 @@ class SimpleVideoTFModel(pl.LightningModule):
 
         # Backbone CNN
         self.backbone = timm.create_model(
-            backbone_name, pretrained=pretrained, features_only=True, out_indices=[-1]
+            backbone, pretrained=pretrained, features_only=True, out_indices=[-1]
         )
 
         # Infer backbone output channels if not provided
@@ -350,7 +350,7 @@ if __name__ == "__main__":
     model = SimpleVideoTFModel(
         num_classes=num_classes,
         num_queries=num_queries,
-        backbone_name=backbone_name,
+        backbone=backbone_name,
         pretrained=pretrained,
         hidden_dim=hidden_dim,
         nheads=nheads,
