@@ -14,7 +14,7 @@ config = edict({
     "batch_size": 8,
     "val_batch_size": 4,
     "num_workers": 8,
-    "learning_rate": 1e-4,
+    "learning_rate": 1e-3,
     "learning_rate_backbone": 1e-5,
     "lr_drop": 200,
     "weight_decay": 1e-4,
@@ -50,7 +50,7 @@ config = edict({
     "log_dir": "logs/",
     "checkpoint_dir": "exp/checkpoints/",
     "save_top_k": 3,
-    "early_stop_patience": 10,
+    "early_stop_patience": -1,
     
 
     # **Others**

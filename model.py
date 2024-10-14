@@ -312,10 +312,7 @@ class SimpleVideoTFModel(pl.LightningModule):
         )
         scheduler = torch.optim.lr_scheduler.StepLR(optimizer, self.lr_drop)
 
-        return {
-            "optimizer": optimizer,
-            "lr_scheduler": scheduler,
-        }
+        return [optimizer], [{"scheduler": scheduler, "interval": "epoch"}]
 
 
 def get_criterion(
@@ -355,12 +352,6 @@ def get_criterion(
 
 
 if __name__ == "__main__":
-    # **Note:** It's recommended to move testing code to a separate script (e.g., test_model.py)
-    # to maintain separation of concerns. However, if you wish to keep it here, ensure it's correctly implemented.
-
-    # Example Testing Code
-    import torch
-
     # Define dummy configuration parameters
     config = {
         "cost_class": 1.0,

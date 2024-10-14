@@ -62,14 +62,14 @@ class HungarianMatcher(nn.Module):
 
             # Compute cost matrix for the current batch element
             # Classification cost: Negative log-probability of the target class
-            prob = F.softmax(logits, dim=-1)  # (num_queries, num_classes)
+            log_probs = -F.log_softmax(logits, dim=-1)  # (num_queries, num_classes)
             # Gather the probabilities of the target classes
             # This requires tgt_labels to be within [0, num_classes-1]
             if torch.any(tgt_labels >= num_classes) or torch.any(tgt_labels < 0):
                 raise ValueError(f"Target labels must be in [0, {num_classes-1}]")
 
             # cost_class: (num_queries, num_targets)
-            cost_class = -prob[:, tgt_labels]  # Negative log-probability
+            cost_class = log_probs[:, tgt_labels]  # Negative log-probability
 
             # Frame index cost: L1 distance between predicted and target frame indices
             # frames: (num_queries,), tgt_frames: (num_targets,)
